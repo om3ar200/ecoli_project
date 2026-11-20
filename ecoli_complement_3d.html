@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>E. coli–Complement 3D Simulation</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html,body{height:100%;margin:0;background:#0d0710;color:#eef;font:13px/1.4 system-ui,Segoe UI,Arial,sans-serif;overflow:hidden}
+#c{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+.hud{position:fixed;background:#0c0a1ccc;border:1px solid #ffffff26;border-radius:12px;padding:10px 12px;backdrop-filter:blur(6px)}
+#ctl{left:10px;top:max(10px,env(safe-area-inset-top));width:min(290px,calc(100vw - 20px))}
+#st{right:10px;top:max(10px,env(safe-area-inset-top));width:min(250px,calc(100vw - 20px))}
+#lg{left:10px;bottom:max(10px,env(safe-area-inset-bottom));max-width:calc(100vw - 20px)}
+h1{font-size:14px;margin:0 0 8px}select,button,input{font:inherit}select,button{background:#1b1630;color:#eef;border:1px solid #ffffff33;border-radius:8px;padding:6px 9px}
+button{cursor:pointer}.row{display:flex;gap:6px;margin:6px 0;align-items:center}.row>*{flex:1}label{display:block;margin-top:6px;color:#b9b4d6}
+input[type=range]{width:100%;accent-color:#ffa31a}.s{display:flex;justify-content:space-between;margin:2px 0}.s b{font-variant-numeric:tabular-nums}
+.d{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}.note{color:#9d98bd;font-size:11px;margin-top:6px}
+.bar{height:6px;background:#ffffff1f;border-radius:4px;overflow:hidden;margin:3px 0 6px}.bar i{display:block;height:100%;background:#ffa31a;width:0}
+#lg span{margin-right:12px;white-space:nowrap}@media(max-width:640px){#st{top:auto;bottom:52px;right:10px;width:calc(100vw - 20px)}}
+</style></head><body>
+<canvas id="c"></canvas>
+<div class="hud" id="ctl"><h1>Bloodstream simulation · driven by the ODE</h1>
+<select id="m"><option value="m2b">Model 2B — infection-dependent</option><option value="m2a">Model 2A — mass balance</option><option value="m1">Model 1 — original</option></select>
+<div class="row"><button id="pp">⏸ Pause</button><button id="rs">↺ Restart</button></div>
+<label>Time τ <b id="tv">0.0</b><input id="ts" type="range" min="0" max="40" step="0.05" value="0"></label>
+<label>Speed <b id="sv">2.0</b>× (τ per second)<input id="sp" type="range" min="0.5" max="8" step="0.5" value="2"></label>
+<label>Killing γ <b id="gv">4.0</b><input id="g" type="range" min="0.5" max="10" step="0.5" value="4"></label>
+<div class="note">Drag to rotate · scroll/pinch to zoom. Particle <i>counts</i> follow b, u, v from the same RK4 solution used in the dashboard; particle <i>motion</i> is illustrative only (well-mixed model).</div></div>
+<div class="hud" id="st"><div class="s"><span><i class="d" style="background:#7bd88f"></i>Bacteria b</span><b id="b">0</b></div><div class="bar"><i id="bb" style="background:#7bd88f"></i></div>
+<div class="s"><span><i class="d" style="background:#4c8dff"></i>Inactive u</span><b id="u">0</b></div><div class="bar"><i id="ub" style="background:#4c8dff"></i></div>
+<div class="s"><span><i class="d" style="background:#ffa31a"></i>Active v</span><b id="v">0</b></div><div class="bar"><i id="vb"></i></div>
+<div class="s"><span>Activation q(b)=ηb/(h+b)</span><b id="q">0</b></div><div class="bar"><i id="qb" style="background:#ff5d8f"></i></div>
+<div class="s"><span>Kills / divisions shown</span><b id="k">0 / 0</b></div></div>
+<div class="hud" id="lg"><span><i class="d" style="background:#7bd88f"></i>E. coli</span><span><i class="d" style="background:#4c8dff"></i>inactive complement P₁</span><span><i class="d" style="background:#ffa31a"></i>active complement P₂</span><span><i class="d" style="background:#ff5d8f"></i>MAC pore ring (kill)</span></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const $=id=>document.getElementById(id),Pm={rho:1,gamma:4,delta:.5,eta:1,h:.1};
+function f(k,y,p){const[b,u,v]=y,g=p.rho*b*(1-b)-p.gamma*b*v;if(k=='m1')return[g,p.delta*(1-u),u-v];if(k=='m2a')return[g,p.delta-(p.delta+p.eta)*u,u-v];const a=p.eta*u*b/(p.h+b);return[g,p.delta*(1-u)-a,a/p.eta-v]}
+let sol=[];const TM=40,DT=.01;
+function solve(){const k=$('m').value;Pm.gamma=+$('g').value;let y=[.05,1,0];sol=[y.slice()];
+for(let i=0;i<TM/DT;i++){const a=f(k,y,Pm),b=f(k,y.map((z,j)=>z+DT/2*a[j]),Pm),c=f(k,y.map((z,j)=>z+DT/2*b[j]),Pm),d=f(k,y.map((z,j)=>z+DT*c[j]),Pm);y=y.map((z,j)=>z+DT*(a[j]+2*b[j]+2*c[j]+d[j])/6);if(i%5==4)sol.push(y.slice())}}
+function at(t){const x=Math.min(t/(DT*5),sol.length-1.001),i=Math.floor(x),w=x-i;return sol[i].map((z,j)=>z+w*(sol[i+1][j]-z))}
+const R=3,LEN=16,NB=90,NU=140,NV=110;
+const ren=new THREE.WebGLRenderer({canvas:$('c'),antialias:true});ren.setPixelRatio(Math.min(devicePixelRatio,2));
+const sc=new THREE.Scene();sc.fog=new THREE.Fog(0x0d0710,14,40);const cam=new THREE.PerspectiveCamera(50,1,.1,100);let dist=15,rx=.35,ry=-.5;
+sc.add(new THREE.AmbientLight(0xffffff,.55));const dl=new THREE.DirectionalLight(0xffffff,.9);dl.position.set(5,8,6);sc.add(dl);
+const world=new THREE.Group();sc.add(world);
+const vessel=new THREE.Mesh(new THREE.CylinderGeometry(R,R,LEN,40,1,true),new THREE.MeshPhongMaterial({color:0x8a1c2e,transparent:true,opacity:.16,side:THREE.DoubleSide,depthWrite:false}));vessel.rotation.z=Math.PI/2;world.add(vessel);
+const wire=new THREE.Mesh(new THREE.CylinderGeometry(R,R,LEN,24,6,true),new THREE.MeshBasicMaterial({color:0xc4455d,wireframe:true,transparent:true,opacity:.12}));wire.rotation.z=Math.PI/2;world.add(wire);
+function inst(geo,col,n,em){const m=new THREE.InstancedMesh(geo,new THREE.MeshPhongMaterial({color:col,emissive:em||0,shininess:60}),n);m.count=0;world.add(m);return m}
+const mB=inst(new THREE.SphereGeometry(.3,14,10),0x7bd88f,NB,0x0f3a1c),mU=inst(new THREE.SphereGeometry(.1,8,6),0x4c8dff,NU,0x10285a),mV=inst(new THREE.IcosahedronGeometry(.16,1),0xffa31a,NV,0x7a3a00);
+mB.geometry.scale(2,1,1);
+function mk(n,sp){const p=new Float32Array(n*3),v=new Float32Array(n*3),ph=new Float32Array(n);for(let i=0;i<n;i++){rp(p,i);v[i*3]=sp*(.7+.6*Math.random());ph[i]=Math.random()*6.28}return{p,v,ph,n}}
+function rp(p,i){const r=R*.92*Math.sqrt(Math.random()),a=Math.random()*6.28;p[i*3]=(Math.random()-.5)*LEN;p[i*3+1]=r*Math.cos(a);p[i*3+2]=r*Math.sin(a)}
+const B=mk(NB,.35),U=mk(NU,1),V=mk(NV,1);let cb=0,cu=0,cv=0,kills=0,divs=0,fl=[];
+const M4=new THREE.Matrix4(),Q=new THREE.Quaternion(),S1=new THREE.Vector3(1,1,1),P3=new THREE.Vector3();
+function flash(x,y,z,col){const m=new THREE.Mesh(new THREE.RingGeometry(.25,.34,24),new THREE.MeshBasicMaterial({color:col,transparent:true,side:THREE.DoubleSide,depthWrite:false}));m.position.set(x,y,z);m.userData.t=0;world.add(m);fl.push(m)}
+function swap(o,a,b){for(let j=0;j<3;j++){const t=o.p[a*3+j];o.p[a*3+j]=o.p[b*3+j];o.p[b*3+j]=t}const t=o.ph[a];o.ph[a]=o.ph[b];o.ph[b]=t}
+function fit(o,cur,tgt,col,kind){while(cur<tgt){const i=cur;if(kind=='b'){rp(o.p,i);divs++;flash(o.p[i*3],o.p[i*3+1],o.p[i*3+2],0x7bd88f)}else if(kind=='v'){rp(o.p,i);if(Math.random()<.35)flash(o.p[i*3],o.p[i*3+1],o.p[i*3+2],0xffa31a)}cur++}
+while(cur>tgt){if(kind=='b'&&cur>1){let best=0,bd=1e9;for(let i=0;i<cur;i++){for(let j=0;j<Math.min(cv,V.n);j+=3){const dx=B.p[i*3]-V.p[j*3],dy=B.p[i*3+1]-V.p[j*3+1],dz=B.p[i*3+2]-V.p[j*3+2],d=dx*dx+dy*dy+dz*dz;if(d<bd){bd=d;best=i}}}
+ const x=B.p[best*3],y=B.p[best*3+1],z=B.p[best*3+2];flash(x,y,z,0xff5d8f);flash(x,y,z,0xff5d8f);fl[fl.length-1].rotation.x=1.2;swap(B,best,cur-1);kills++}cur--}return cur}
+function step(o,mesh,n,dt,t,kind){const sp=kind=='b'?.35:1;for(let i=0;i<n;i++){let x=o.p[i*3],y=o.p[i*3+1],z=o.p[i*3+2];const r2=(y*y+z*z)/(R*R),fv=Math.max(.15,1.25*(1-r2))*o.v[i*3]*(kind=='u'?.9:1);
+x+=fv*dt;const w=o.ph[i]+t*(kind=='b'?.8:2);y+=Math.sin(w)*.25*dt*(kind=='b'?1:2);z+=Math.cos(w*1.3)*.25*dt*(kind=='b'?1:2);
+if(kind=='v'&&cb>0){let bd=9,bx=0,by=0,bz=0;for(let j=0;j<cb;j+=1){const dx=B.p[j*3]-x,dy=B.p[j*3+1]-y,dz=B.p[j*3+2]-z,d=dx*dx+dy*dy+dz*dz;if(d<bd){bd=d;bx=dx;by=dy;bz=dz}}if(bd<9){const k=dt*.9/(Math.sqrt(bd)+.3);x+=bx*k;y+=by*k;z+=bz*k}}
+const rr=Math.hypot(y,z);if(rr>R*.95){y*=R*.95/rr;z*=R*.95/rr}if(x>LEN/2){x-=LEN;if(kind!='b'){const a=Math.random()*6.28,q=R*.9*Math.sqrt(Math.random());y=q*Math.cos(a);z=q*Math.sin(a)}}
+o.p[i*3]=x;o.p[i*3+1]=y;o.p[i*3+2]=z;P3.set(x,y,z);const s=kind=='b'?1:1;if(kind=='b')Q.setFromAxisAngle(new THREE.Vector3(0,0,1),Math.sin(w*.5)*.6);else Q.identity();M4.compose(P3,Q,S1);mesh.setMatrixAt(i,M4)}mesh.instanceMatrix.needsUpdate=true}
+let t=0,play=true,last=performance.now(),el=0;
+function resize(){const w=innerWidth,h=innerHeight;ren.setSize(w,h,false);cam.aspect=w/h;cam.updateProjectionMatrix()}addEventListener('resize',resize);resize();
+function frame(now){requestAnimationFrame(frame);const dt=Math.min(.05,(now-last)/1000);last=now;el+=dt;
+if(play){t+=dt*(+$('sp').value);if(t>=TM)t=TM}$('ts').value=t;$('tv').textContent=t.toFixed(1);
+const[b,u,v]=at(t);cb=fit(B,cb,Math.round(NB*Math.min(1,b)),0,'b');cu=fit(U,cu,Math.round(NU*Math.min(1,u/1.0)*.9),0,'u');cv=fit(V,cv,Math.round(NV*Math.min(1,v/1.1)),0,'v');
+mB.count=cb;mU.count=cu;mV.count=cv;step(B,mB,cb,dt,el,'b');step(U,mU,cu,dt,el,'u');step(V,mV,cv,dt,el,'v');
+for(let i=fl.length-1;i>=0;i--){const m=fl[i];m.userData.t+=dt;const k=m.userData.t/.7;m.scale.setScalar(1+k*5);m.material.opacity=Math.max(0,1-k);m.lookAt(cam.position);if(k>=1){world.remove(m);m.geometry.dispose();m.material.dispose();fl.splice(i,1)}}
+const q=$('m').value=='m2b'?Pm.eta*b/(Pm.h+b):Pm.eta;
+$('b').textContent=b.toFixed(3);$('u').textContent=u.toFixed(3);$('v').textContent=v.toFixed(3);$('q').textContent=q.toFixed(3);$('k').textContent=kills+' / '+divs;
+$('bb').style.width=Math.min(100,b*100)+'%';$('ub').style.width=Math.min(100,u*100)+'%';$('vb').style.width=Math.min(100,v/1.1*100)+'%';$('qb').style.width=Math.min(100,q/Pm.eta*100)+'%';
+if(!drag&&play)ry+=dt*.05;world.rotation.set(rx,ry,0);cam.position.set(0,0,dist);cam.lookAt(0,0,0);ren.render(sc,cam)}
+let drag=false,lx=0,ly=0;const cv0=$('c');
+cv0.addEventListener('pointerdown',e=>{drag=true;lx=e.clientX;ly=e.clientY;cv0.setPointerCapture(e.pointerId)});
+cv0.addEventListener('pointermove',e=>{if(drag){ry+=(e.clientX-lx)*.008;rx=Math.max(-1.4,Math.min(1.4,rx+(e.clientY-ly)*.008));lx=e.clientX;ly=e.clientY}});
+cv0.addEventListener('pointerup',()=>drag=false);cv0.addEventListener('wheel',e=>{e.preventDefault();dist=Math.max(7,Math.min(28,dist+e.deltaY*.01))},{passive:false});
+function reset(){solve();t=0;cb=cu=cv=0;kills=divs=0;fl.forEach(m=>world.remove(m));fl=[]}
+$('pp').onclick=()=>{play=!play;$('pp').textContent=play?'⏸ Pause':'▶ Play'};$('rs').onclick=()=>{reset();play=true;$('pp').textContent='⏸ Pause'};
+$('ts').oninput=e=>{t=+e.target.value;play=false;$('pp').textContent='▶ Play'};$('sp').oninput=e=>$('sv').textContent=(+e.target.value).toFixed(1);
+$('g').oninput=e=>{$('gv').textContent=(+e.target.value).toFixed(1);reset()};$('m').onchange=reset;
+reset();requestAnimationFrame(frame);
+</script></body></html>

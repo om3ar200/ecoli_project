@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>E. coli–Complement Dashboard v2</title>
+<style>
+:root{--bg:#f5f7fb;--card:#fff;--ink:#172033;--muted:#667085;--line:#e5e9f0;--blue:#2563eb;--c1:#2563eb;--c2:#0f9d8a;--c3:#d97706;--warn:#fff8e7;--warnb:#f1d69b;--warnt:#694b0b;--code:#f8fafc;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){color-scheme:dark;--bg:#0e1424;--card:#171f35;--ink:#e6eaf4;--muted:#98a2b8;--line:#2a3452;--blue:#6b95ff;--c1:#6b95ff;--c2:#35c9b3;--c3:#f0a23a;--warn:#2b2412;--warnb:#5c4a1c;--warnt:#f3d99a;--code:#101830}}
+*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,Segoe UI,Arial,sans-serif}
+header{background:#101c35;color:#fff;padding:22px max(18px,calc((100% - 1180px)/2))}
+h1{font-size:clamp(21px,3vw,30px);margin:0 0 4px}header p{margin:0;color:#c7d2e5}
+main{max-width:1180px;margin:20px auto;padding:0 16px 40px}
+.notice{background:var(--warn);border:1px solid var(--warnb);color:var(--warnt);padding:11px 14px;border-radius:12px;margin-bottom:14px;font-size:14px}
+.grid{display:grid;grid-template-columns:310px 1fr;gap:16px;align-items:start}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;min-width:0}
+.card h2{font-size:16px;margin:0 0 10px}.controls{position:sticky;top:12px}
+.field{margin:12px 0}.field label{display:flex;justify-content:space-between;font-weight:600;font-size:13px}.field output{color:var(--blue);font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:var(--blue);margin:6px 0 0}
+select,button{font:inherit;border-radius:9px;border:1px solid var(--line);padding:8px 10px;background:var(--card);color:var(--ink)}
+select{width:100%}button{cursor:pointer;font-weight:650}button.p{background:var(--blue);border-color:var(--blue);color:#fff}
+.act{display:flex;gap:8px;margin-top:12px}.act button{flex:1}.small{font-size:12px;color:var(--muted)}
+.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+.m{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:11px}.m b{display:block;font-size:13px;margin-bottom:4px}
+.m span{display:block;font-size:12px;color:var(--muted)}.m strong{font-size:19px;font-variant-numeric:tabular-nums}
+.charts{display:grid;grid-template-columns:1fr 1fr;gap:14px}.charts canvas{width:100%;height:240px;display:block}
+.full{grid-column:1/-1}.scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:right;border-bottom:1px solid var(--line);padding:7px}th:first-child,td:first-child{text-align:left}
+.eq{font:12px/1.6 ui-monospace,Consolas,monospace;white-space:pre-wrap;background:var(--code);border-radius:9px;padding:10px;overflow-x:auto}
+.tag{display:inline-block;border-radius:99px;padding:2px 8px;font-size:11px;font-weight:700;background:#e8f5ef;color:#16734c}.tag.w{background:#fff2dc;color:#925b08}
+footer{color:var(--muted);font-size:12px;margin-top:14px}
+@media(max-width:850px){.grid,.charts{grid-template-columns:1fr}.controls{position:static}.metrics{grid-template-columns:1fr}}
+</style></head><body>
+<header><h1>E. coli–Complement Dynamics · v2</h1><p>Interactive numerical laboratory for three reduced models</p></header>
+<main>
+<div class="notice"><b>Research-use warning:</b> parameters are illustrative and dimensionless, not calibrated to clinical E. coli or human complement data.</div>
+<div class="grid">
+<aside class="card controls"><h2>Controls</h2>
+<div class="field"><label for="model">Model</label><select id="model"><option value="all">Compare all three</option><option value="m1">Model 1 — Original</option><option value="m2a">Model 2A — Mass balance</option><option value="m2b">Model 2B — Infection-dependent</option></select></div>
+<div id="sl"></div>
+<div class="act"><button class="p" id="run">Run</button><button id="reset">Reset</button></div>
+<p class="small">Sliders rerun automatically. Integrator: classical RK4, dt = 0.01, no clamping, so numerical errors are not hidden.</p></aside>
+<section>
+<div class="metrics" id="metrics"></div>
+<div class="charts">
+<div class="card"><h2>Bacteria b(τ)</h2><canvas id="cb"></canvas></div>
+<div class="card"><h2>Active pool v(τ)</h2><canvas id="cv"></canvas></div>
+<div class="card"><h2>Inactive pool u(τ)</h2><canvas id="cu"></canvas></div>
+<div class="card"><h2>Phase plane (b, v)</h2><canvas id="cp"></canvas></div>
+<div class="card full"><h2>Final states vs. equilibria</h2><div class="scroll" id="res"></div></div>
+<div class="card full"><h2>Normalised sensitivity of b* to each parameter</h2><div class="scroll" id="sens"></div>
+<p class="small">S = (∂b*/∂p)(p/b*), by central differences. A dash means b* = 0 (disease-free branch), where it is not defined.</p></div>
+<div class="card full"><h2>Model equations</h2><div class="eq">M1:  b′ = ρb(1−b) − γbv;   u′ = δ(1−u);            v′ = u − v
+M2A: b′ = ρb(1−b) − γbv;   u′ = δ − (δ+η)u;         v′ = u − v
+M2B: b′ = ρb(1−b) − γbv;   u′ = δ(1−u) − ηu·b/(h+b); v′ = u·b/(h+b) − v   (corrected: no η in v′)
+
+Threshold (DFE stable iff R₀ &lt; 1):  M1: R₀ = ρ/γ   ·   M2A: R₀ = ρ(δ+η)/(γδ)   ·   M2B: DFE always unstable</div></div>
+</div></section></div>
+<footer>Note: γ ∝ α and η ∝ α, so moving η alone at fixed γ is not a pure change of the activation rate α; scale γ and η together for that. b = B/K, u = P₁/(Λ/μ₁), v = P₂/(αΛ/(μ₁μ₂)), τ = μ₂t.</footer></main>
+<script>
+const $=id=>document.getElementById(id),D={rho:1,gamma:4,delta:.5,eta:1,h:.1};
+const defs=[['rho','ρ · growth / removal',.1,3,.05],['gamma','γ · killing strength',.1,10,.1],['delta','δ · inactive removal',.1,3,.05],['eta','η · max activation',.05,4,.05],['h','h · half-activation',.01,1,.01],['b0','b(0) initial bacteria',.005,.5,.005],['u0','u(0) inactive pool',0,2,.05],['v0','v(0) active pool',0,1.5,.05],['T','Duration τ',10,100,5]];
+const init={...D,b0:.05,u0:1,v0:0,T:40};
+defs.forEach(([k,l,a,b,s])=>{const d=document.createElement('div');d.className='field';d.innerHTML=`<label for="${k}">${l}<output id="${k}o"></output></label><input id="${k}" type="range" min="${a}" max="${b}" step="${s}" value="${init[k]}">`;$('sl').appendChild(d)});
+const NM={m1:'Model 1',m2a:'Model 2A',m2b:'Model 2B'},CV=()=>['--c1','--c2','--c3'].map(c=>getComputedStyle(document.documentElement).getPropertyValue(c).trim());
+const P=()=>Object.fromEntries(defs.map(d=>[d[0],+$(d[0]).value]));
+function f(k,y,p){const[b,u,v]=y,g=p.rho*b*(1-b)-p.gamma*b*v;if(k=='m1')return[g,p.delta*(1-u),u-v];if(k=='m2a')return[g,p.delta-(p.delta+p.eta)*u,u-v];const a=p.eta*u*b/(p.h+b);return[g,p.delta*(1-u)-a,a/p.eta-v]}
+function rk4(k,p){const dt=.01,n=Math.round(p.T/dt);let y=[p.b0,p.u0,p.v0];const out=[y.slice()],st=Math.max(1,Math.floor(n/600));
+for(let i=1;i<=n;i++){const a=f(k,y,p),b=f(k,y.map((z,j)=>z+dt/2*a[j]),p),c=f(k,y.map((z,j)=>z+dt/2*b[j]),p),d=f(k,y.map((z,j)=>z+dt*c[j]),p);y=y.map((z,j)=>z+dt*(a[j]+2*b[j]+2*c[j]+d[j])/6);if(i%st==0||i==n)out.push(y.slice())}return out}
+function R0(k,p){return k=='m1'?p.rho/p.gamma:k=='m2a'?p.rho*(p.delta+p.eta)/(p.gamma*p.delta):Infinity}
+function eq(k,p){const{rho:r,gamma:g,delta:d,eta:e,h}=p;if(k=='m1')return{b:Math.max(0,1-g/r),u:1,v:1};
+if(k=='m2a'){const u=d/(d+e);return{b:Math.max(0,1-g*u/r),u,v:u}}
+const G=g/r,ka=1+e/d,B=ka-h-G,b=(B+Math.sqrt(B*B+4*ka*h))/(2*ka),s=b/(h+b),u=d/(d+e*s);return{b,u,v:u*s}}
+function sens(k,p){return Object.keys(D).map(n=>{const a={...p},m={...p},e=1e-5;a[n]*=1+e;m[n]*=1-e;const b0=eq(k,p).b;return[n,b0>1e-9?(eq(k,a).b-eq(k,m).b)/(2*e*p[n])*p[n]/b0:NaN]})}
+function plot(id,series,xl,yl,xy){const c=$(id),x=c.getContext('2d'),r=devicePixelRatio||1,W=c.clientWidth,H=c.clientHeight;c.width=W*r;c.height=H*r;x.setTransform(r,0,0,r,0,0);
+const st=getComputedStyle(document.body),ink=st.color,mu=getComputedStyle(document.documentElement).getPropertyValue('--muted').trim(),ln=getComputedStyle(document.documentElement).getPropertyValue('--line').trim(),col=CV();
+const L=46,R=10,T=26,B=34,w=W-L-R,h=H-T-B;let xs=series.flatMap(s=>s.pts.map(p=>p[0])),ys=series.flatMap(s=>s.pts.map(p=>p[1]));
+const x0=0,x1=Math.max(...xs)||1,y0=0,y1=(Math.max(...ys)||.05)*1.08;const X=v=>L+(v-x0)/(x1-x0)*w,Y=v=>T+h-(v-y0)/(y1-y0)*h;
+x.font='11px system-ui';x.fillStyle=mu;x.strokeStyle=ln;x.lineWidth=1;
+for(let j=0;j<=4;j++){const yv=y0+(y1-y0)*j/4,xv=x0+(x1-x0)*j/4;x.beginPath();x.moveTo(L,Y(yv));x.lineTo(W-R,Y(yv));x.stroke();x.textAlign='right';x.fillText(yv.toFixed(2),L-5,Y(yv)+4);x.textAlign='center';x.fillText(xv.toFixed(xy?2:0),X(xv),H-B+14)}
+x.textAlign='center';x.fillText(xl,L+w/2,H-4);x.save();x.translate(11,T+h/2);x.rotate(-Math.PI/2);x.fillText(yl,0,0);x.restore();
+series.forEach((s,i)=>{x.strokeStyle=col[s.ci];x.lineWidth=2;x.beginPath();s.pts.forEach((p,j)=>j?x.lineTo(X(p[0]),Y(p[1])):x.moveTo(X(p[0]),Y(p[1])));x.stroke();
+if(s.eq){x.fillStyle=col[s.ci];x.beginPath();x.arc(X(s.eq[0]),Y(s.eq[1]),4,0,7);x.fill()}
+x.fillStyle=col[s.ci];x.textAlign='left';x.fillRect(L+6+i*92,9,12,3);x.fillStyle=ink;x.fillText(s.name,L+22+i*92,13)})}
+function render(){const p=P(),ks=$('model').value=='all'?['m1','m2a','m2b']:[$('model').value];
+defs.forEach(d=>$(d[0]+'o').textContent=(+$(d[0]).value).toFixed(d[0]=='T'?0:2));
+const S=ks.map(k=>({k,ci:['m1','m2a','m2b'].indexOf(k),name:NM[k],y:rk4(k,p),e:eq(k,p),r:R0(k,p)}));
+const dt=p.T/(S[0].y.length-1);
+$('metrics').innerHTML=S.map(s=>{const l=s.y.at(-1),dfe=s.e.b<1e-6;return`<div class="m"><b>${NM[s.k]} <span class="tag ${dfe?'':'w'}" style="display:inline">${dfe?'cleared':'persists'}</span></b><span>b(T) = <strong>${l[0].toFixed(4)}</strong></span><span>R₀ = ${isFinite(s.r)?s.r.toFixed(3):'∞ (DFE unstable)'}</span></div>`}).join('');
+const ser=i=>S.map(s=>({ci:s.ci,name:s.name,pts:s.y.map((z,j)=>[j*dt,z[i]])}));
+plot('cb',ser(0),'τ','b');plot('cv',ser(2),'τ','v');plot('cu',ser(1),'τ','u');
+plot('cp',S.map(s=>({ci:s.ci,name:s.name,pts:s.y.map(z=>[z[0],z[2]]),eq:[s.e.b,s.e.v]})),'b','v',1);
+$('res').innerHTML='<table><tr><th>Model</th><th>b(T)</th><th>u(T)</th><th>v(T)</th><th>b*</th><th>u*</th><th>v*</th></tr>'+S.map(s=>{const l=s.y.at(-1);return`<tr><td>${s.name}</td>${[l[0],l[1],l[2],s.e.b,s.e.u,s.e.v].map(v=>`<td>${v.toFixed(5)}</td>`).join('')}</tr>`}).join('')+'</table>';
+$('sens').innerHTML='<table><tr><th>Model</th>'+Object.keys(D).map(n=>`<th>${n}</th>`).join('')+'</tr>'+S.map(s=>`<tr><td>${s.name}</td>${sens(s.k,p).map(([n,v])=>`<td>${isFinite(v)?v.toFixed(3):'—'}</td>`).join('')}</tr>`).join('')+'</table>'}
+document.querySelectorAll('input,select').forEach(e=>e.addEventListener('input',render));$('run').onclick=render;
+$('reset').onclick=()=>{defs.forEach(d=>$(d[0]).value=init[d[0]]);$('model').value='all';render()};
+addEventListener('resize',render);render();
+</script></body></html>
